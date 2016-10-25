@@ -55,7 +55,7 @@ public class BookBuyerAgent extends Agent {
 
 			// Add a TickerBehaviour that schedules a request to seller agents
 			// every minute
-			addBehaviour(new TickerBehaviour(this, 60000) {
+			addBehaviour(new TickerBehaviour(this, 30000) {
 				protected void onTick() {
 					System.out.println("Trying to buy " + targetBookTitle);
 					// Update the list of seller agents
@@ -103,6 +103,8 @@ public class BookBuyerAgent extends Agent {
 		private MessageTemplate mt; // The template to receive replies
 		private int step = 0;
 
+		private int nbOfSeller = 0;
+
 		public void action() {
 			switch (step) {
 			case 0:
@@ -128,6 +130,7 @@ public class BookBuyerAgent extends Agent {
 				if (reply != null) {
 					// Reply received
 					if (reply.getPerformative() == ACLMessage.PROPOSE) {
+						nbOfSeller++;
 						// This is an offer
 						int price = Integer.parseInt(reply.getContent());
 						if (bestSeller == null || price < bestPrice) {
@@ -148,36 +151,47 @@ public class BookBuyerAgent extends Agent {
 
 			case 2:
 
-				// On envoie le meilleur prix trouvé à l'ensemble des sellers
-				// Les sellers peuvent faire une 2e offre 10% moins cher
+				if (nbOfSeller > 0) {
 
-				
-				
-				ACLMessage cfp2 = new ACLMessage(ACLMessage.INFORM);
-				for (int i = 0; i < sellerAgents.length; ++i) {
-					cfp2.addReceiver(sellerAgents[i]);
+					System.out.println("nbOfSeller > 0");
+					// On envoie le meilleur prix trouvé à l'ensemble des
+					// sellers
+					// Les sellers peuvent faire une 2e offre 10% moins cher
+
+					ACLMessage cfp2 = new ACLMessage(ACLMessage.REQUEST);
+					for (int i = 0; i < sellerAgents.length; ++i) {
+						cfp2.addReceiver(sellerAgents[i]);
+					}
+					// cfp2.setContent(targetBookTitle);
+					cfp2.setContent(targetBookTitle + ";" + String.valueOf(bestPrice));
+
+					// try {
+					// Proposition p = new Proposition(targetBookTitle,
+					// bestPrice);
+					//
+					// cfp2.setContentObject(p);
+					// } catch (IOException e) {
+					// e.printStackTrace();
+					// }
+
+					cfp2.setConversationId("book-trade");
+					cfp2.setReplyWith("cfp" + System.currentTimeMillis()); // Unique
+																			// value
+					myAgent.send(cfp2);
+					// Prepare the template to get proposals
+					mt = MessageTemplate.and(MessageTemplate.MatchConversationId("book-trade"),
+							MessageTemplate.MatchInReplyTo(cfp2.getReplyWith()));
+
+					step = 3;
+					break;
+
+				} else {
+					step = 4;
+					break;
 				}
-				// cfp2.setContent(targetBookTitle);
-
-				try {
-					cfp2.setContentObject(new Proposition(targetBookTitle, bestPrice));
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-
-				cfp2.setConversationId("book-trade");
-				cfp2.setReplyWith("cfp" + System.currentTimeMillis()); // Unique
-																		// value
-				myAgent.send(cfp2);
-				// Prepare the template to get proposals
-				mt = MessageTemplate.and(MessageTemplate.MatchConversationId("book-trade"),
-						MessageTemplate.MatchInReplyTo(cfp2.getReplyWith()));
-
-				step = 3;
-				break;
 
 			case 3:
-
+				bestSeller = null;
 				// Receive all proposals/refusals from seller agents
 				ACLMessage reply2 = myAgent.receive(mt);
 				if (reply2 != null) {
@@ -187,6 +201,7 @@ public class BookBuyerAgent extends Agent {
 						int price = Integer.parseInt(reply2.getContent());
 						if (bestSeller == null || price < bestPrice) {
 							// This is the best offer at present
+							System.out.println(reply2.getSender().getName() + " : current : " + price);
 							bestPrice = price;
 							bestSeller = reply2.getSender();
 						}

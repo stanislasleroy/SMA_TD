@@ -70,6 +70,8 @@ public class BookSellerAgent extends Agent {
 
 		// Add the behaviour serving purchase orders from buyer agents
 		addBehaviour(new PurchaseOrdersServer());
+
+		addBehaviour(new CounterOfferRequestsServer());
 	}
 
 	// Put agent clean-up operations here
@@ -142,52 +144,57 @@ public class BookSellerAgent extends Agent {
 	private class CounterOfferRequestsServer extends CyclicBehaviour {
 		public void action() {
 
-			MessageTemplate mt = MessageTemplate.MatchPerformative(ACLMessage.INFORM);
+			MessageTemplate mt = MessageTemplate.MatchPerformative(ACLMessage.REQUEST);
 			ACLMessage msg = myAgent.receive(mt);
 
 			if (msg != null) {
 
-				// CFP Message received. Process it
-				Proposition prop;
-				try {
+				System.out.println(this.getAgent().getName() + " : Demande de négociation");
 
-					ACLMessage reply = msg.createReply();
+				ACLMessage reply = msg.createReply();
 
-					prop = (Proposition) msg.getContentObject();
+				// prop = (Proposition) msg.getContentObject();
 
-					float price = (float) catalogue.get(prop.getPrice());
-					String title = prop.getTitle();
+				String c = (String) msg.getContent();
+				String[] array = c.split(";");
 
-					if (price > 0) {
+				Integer bp = Integer.parseInt(array[1]);
+				String title = array[0];
+				Integer myPrice = (Integer) catalogue.get(array[0]);
 
-						System.out.println("Le client nous informe qu'il existe un concurrent moins cher");
+				if (bp.intValue() > 0 && myPrice.intValue() > bp.intValue()) {
 
-						// The requested book is available for sale. Reply with
-						// the price
-						reply.setPerformative(ACLMessage.PROPOSE);
-						// reply.setContent(String.valueOf(price.intValue()));
+					System.out.println(this.getAgent().getName()
+							+ " : Le client nous informe qu'il existe un concurrent moins cher");
 
-						float newPrice = (price - 10 * price) / 100;
+					// The requested book is available for sale. Reply with
+					// the price
+					reply.setPerformative(ACLMessage.PROPOSE);
 
-						reply.setContentObject(new Proposition(title, newPrice));
+					// float newPrice = (price - 10 * price) / 100;
+					Integer newPrice = myPrice - 5;
+					catalogue.put(title, new Integer(newPrice));
+					
+					System.out.println();
 
-					} else {
-						// The requested book is NOT available for sale.
-						reply.setPerformative(ACLMessage.REFUSE);
-						reply.setContent("not-available");
-					}
-
-					myAgent.send(reply);
-
-				} catch (UnreadableException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					reply.setContent(String.valueOf(newPrice.intValue()));
 				}
 
-				// Integer price = (Integer) catalogue.get(prop.getTitle());
+				else if (bp.intValue() > 0 && myPrice.intValue() == bp.intValue()) {
+
+					System.out.println(this.getAgent().getName() + " : My price is the lowest");
+
+					reply.setPerformative(ACLMessage.PROPOSE);
+					reply.setContent(String.valueOf(bp.intValue()));
+				}
+
+				else {
+					// The requested book is NOT available for sale.
+					reply.setPerformative(ACLMessage.REFUSE);
+					reply.setContent("not-available");
+				}
+
+				myAgent.send(reply);
 
 			} else {
 				block();
@@ -216,7 +223,8 @@ public class BookSellerAgent extends Agent {
 					reply.setPerformative(ACLMessage.INFORM);
 					System.out.println(title + " sold to agent " + msg.getSender().getName());
 				} else {
-					// The requested book has been sold to another buyer in the
+					// The requested book has been sold to another buyer in
+					// the
 					// meanwhile .
 					reply.setPerformative(ACLMessage.FAILURE);
 					reply.setContent("not-available");
